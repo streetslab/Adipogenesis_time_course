@@ -1,0 +1,41 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(ComplexHeatmap)
+library(ggplot2)
+
+source(file = "~/time-series/RNotebook/scripts/custom_functions.R")
+tfs=read.delim(file = "~/time-series/TF_names_v_1.01.txt",header = F)
+tfs=tfs$V1
+load(file = "~/summary_time_series/files/gwas.subset.RData")
+lineage="white"
+if (lineage=="white"){
+  load(file = "~/summary_time_series/RData/white/dynagenes.RData")
+  gwas_dyna_genes=intersect(dyna_genes,gwas.subset$MAPPED_GENE)
+  load(file = "~/summary_time_series/files/white/gene_cluster.RData")
+  print(barplotgenebymodule(gene_list = gwas_dyna_genes,gene_cluster = gene_cluster,lineage = lineage))
+  gwas_dyna_tfs=intersect(tfs,gwas_dyna_genes)
+  sort(genesbymetabo(gene_list = gwas_dyna_tfs,gwas = gwas.subset))
+  #plot_hm_cs(s.object = s.object,ordered_gene_list = gwas_dyna_tfs,cell_order_variable = cell_order_variable,gene_split = gene_cluster[gwas_dyna_tfs],show_row_names = T)
+} else {
+  load(file = "~/summary_time_series/RData/brown/dynagenes.RData")
+  gwas_dyna_genes=intersect(dyna_genes,gwas.subset$MAPPED_GENE)
+  load(file = "~/summary_time_series/files/brown/gene_cluster.RData")
+  print(barplotgenebymodule(gene_list = gwas_dyna_genes,gene_cluster = gene_cluster,lineage = lineage))
+  gwas_dyna_tfs=intersect(tfs,gwas_dyna_genes)
+  sort(genesbymetabo(gene_list = gwas_dyna_tfs,gwas = gwas.subset))
+}
+```
+
+```{r}
+cell_order_variable="pd3"
+gene="SOX9"
+if (lineage=="white"){
+  load(file = "~/summary_time_series/RData/white/s.object_with_pds.RData")
+  plot_gene_list_individual(s.object = s.object,gene_list = gene,cell_order_variable = cell_order_variable)
+}
+```
+

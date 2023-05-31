@@ -1,0 +1,34 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(gridExtra)
+library(ggplot2)
+library(RColorBrewer)
+library(viridis)
+library(Seurat)
+size=20
+pt.size=.75
+dpi=600
+source(file = "~/summary_time_series/figures/figure_toolkit.R")
+load("~/time-series/Rdata/seurat_integration_brown.RData")
+```
+
+```{r}
+load(file = "~/summary_time_series/RData/white/s.object_with_pds.RData")
+umap_plot(s.object = s.object,plot_variable = "batch.indices",pt.size = pt.size,text_size = size,color_scheme = brewer.pal(n = 5,name = "YlGnBu"),filename = "white.umap.harvestation.tiff",dpi = dpi,transparency = .2,type = "manuscript",ver = "v2")
+feature_plot(s.object = s.object,gene = "ADIPOQ",pt.size = pt.size,text_size = size,filename = "white.feature.adipoq.tiff",dpi = dpi,type = "manuscript")
+umap_plot(s.object = s.object,plot_variable = "cluster",pt.size = pt.size,text_size = size,color_scheme = brewer.pal(n = 5,name = "Set2"),filename = "white.umap.cluster.tiff",dpi = dpi,type = "manuscript",ver = "v2")
+plotclusterbyday(s.object = s.object,text_size = size,color_scheme = brewer.pal(n = 5,name = "Set2"),filename = "white.cluster.by.day.tiff",dpi = dpi,ver = "v2")
+
+
+load(file = "~/summary_time_series/RData/brown/s.object_with_pds.RData")
+umap_plot(s.object = s.object,plot_variable = "batch.indices",pt.size = pt.size,text_size = size,color_scheme = brewer.pal(n = 5,name = "YlGnBu"),filename = "brown.umap.harvestation.tiff",dpi = dpi,transparency = .4,type = "manuscript",ver = "v2")
+feature_plot(s.object = s.object,gene = "ADIPOQ",pt.size = pt.size,text_size = size,filename = "brown.feature.adipoq.tiff",dpi = dpi,type = "manuscript",ver = "v2")
+umap_plot(s.object = s.object,plot_variable = "cluster",pt.size = pt.size,text_size = size,color_scheme = brewer.pal(n = 5,name = "Set2"),filename = "brown.umap.cluster.tiff",dpi = dpi,type = "manuscript",ver = "v2")
+plotclusterbyday(s.object = s.object,text_size = size,color_scheme = brewer.pal(n = 5,name = "Set2"),filename = "brown.cluster.by.day.tiff",dpi = dpi,ver = "v2")
+```
+
+

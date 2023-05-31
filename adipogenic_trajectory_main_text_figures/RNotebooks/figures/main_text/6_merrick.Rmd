@@ -1,0 +1,82 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+# Load libraries
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+# Read merrick dataset
+merrick=Read10X(data.dir = "~/summary_time_series/files/scRNAseq_public/merrick_2019/murine_p12/")
+merrick=CreateSeuratObject(merrick,min.features = 500)
+merrick[["percent.mt"]] <- PercentageFeatureSet(merrick, pattern = "^mt-")
+merrick <- subset(merrick, subset =  percent.mt < 5)
+merrick=NormalizeData(merrick)
+merrick=FindVariableFeatures(merrick)
+merrick=ScaleData(merrick)
+merrick=RunPCA(merrick)
+merrick=RunUMAP(merrick,dims = 1:30)
+UMAPPlot(merrick)
+```
+
+```{r}
+# Group 1 = Dpp4
+FeaturePlot(merrick,"Dpp4")
+# Group 2= ICAM1
+FeaturePlot(merrick,"Icam1")
+# Group 3 = Clec11a
+FeaturePlot(merrick,"Clec11a")
+merrick=FindNeighbors(merrick,dims = 1:30)
+merrick=FindClusters(merrick,resolution = 0.2)
+UMAPPlot(merrick,label=T,label.size=10,pt.size=1)+scale_color_manual(values = c("red","seagreen2","navyblue","yellow2","grey","forestgreen","orange",replicate(n = 5,"grey")))+theme_void()
+```
+
+```{r}
+# Load VISION
+library(VISION)
+library(Matrix)
+# Read in expression counts (Genes X Cells)
+counts <- merrick@assays$RNA@counts
+# Scale counts within a sample
+n.umi <- colSums(counts)
+scaled_counts <- t(t(counts) / n.umi) * median(n.umi)
+
+# Adding UMAP
+projection <- merrick@reductions$umap@cell.embeddings
+
+# Read in meta data (Cells x Vars)
+meta = merrick@meta.data
+
+load("~/summary_time_series/RData/white/slingshot_ugenes_de.RData")
+load("~/summary_time_series/RData/white/vision_ugenes_de.RData")
+
+# Create vision signature
+sigu=vector(mode = "double",length = length(intersect(sugenes_de,vugenes_de)))
+sigu[]=1
+names(sigu)=intersect(sugenes_de,vugenes_de)
+sig=sigu
+sig <- createGeneSignature(name = "Adipo_Ordering", sigData = sig)
+Signatures=c(sig)
+
+#
+vis <- Vision(scaled_counts,signatures = Signatures,meta = meta)
+vis <- addProjection(vis, "UMAP", projection)
+vis <- analyze(vis)
+#viewResults(vis)
+```
+
+```{r}
+merrick$score=vis@SigScores[,1]
+ggplot(merrick@meta.data[WhichCells(object = merrick,idents = c(0,3,2)),],aes(x=score,fill=seurat_clusters))+geom_histogram(aes(y=..density..),position = position_dodge(),color="black",alpha=0.1)+theme_classic(base_size = 30)+geom_density(alpha=.5)+theme(legend.position = "top")+scale_fill_manual(values = c("red","navyblue","yellow2"))+theme(legend.position = "none")
+```
+
+```{r}
+wilcox.test(x = merrick$score[merrick$seurat_clusters==2],y= merrick$score[merrick$seurat_clusters==0])
+```

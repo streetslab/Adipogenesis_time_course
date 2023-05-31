@@ -1,0 +1,112 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# Load packages
+library(DESeq2) # Install from bioconductor
+library(readxl)
+library("pheatmap")
+library("RColorBrewer")
+library(factoextra)
+library(umap)
+library(clusterCrit)
+library(ggpubr)
+library("org.Hs.eg.db")
+```
+
+```{r}
+source(file = "~/time-series/RNotebook/scripts/custom_functions.R")
+load(file = "~/summary_time_series/RData/white/gene_cluster.RData")
+load(file = "~/summary_time_series/RData/samples_to_filter_WAT_RNA-seq.RData")
+
+###**** DEFINE STUDY AND GROUP VARIABLE HERE ****####
+study="Microarray" # 3 studies considered 1. visceral.RNA.seq 2. WAT.RNA.seq 3. Microarray
+group_variable = "Phenotype"
+
+# Read bulk gene expression dataset
+if (study=="visceral.RNA.seq") {
+  countdata=readbulkgeneexpression(path = "~/summary_time_series/files/oby22950-sup-0007-tables1.xlsx",study = study) 
+} else if (study=="WAT.RNA.seq") {
+  countdata_lean=readbulkgeneexpression(path_to_file   = "~/summary_time_series/files/GSE162653_Week_0_Normal_weight.txt",study = study)
+  countdata_obese=readbulkgeneexpression(path_to_file  = "~/summary_time_series/files/GSE162653_Week_0_Obese.txt",study = study)
+  countdata=mergebulkrnaseq(countdata_lean,countdata_obese)
+}
+
+# Setup DDS object
+if (study=="visceral.RNA.seq") {
+  dds=setupdds(countdata = countdata,study = study)
+} else if (study=="WAT.RNA.seq") {
+  dds=setupdds(countdata = countdata,study = study,samples_to_filter = obese)
+}
+
+# Asses number of top genes for PCA
+if (study!="Microarray") {
+  vsd <- vst(dds, blind = FALSE)
+  ntop_genes=seq(500,20000,500)
+  clusterseparationtopgenes(deseqobject = vsd,coeff = "Silhouette",ntop_genes = ntop_genes,group_variable = group_variable)
+}
+
+# Assign number of top genes
+if (study=="visceral.RNA.seq") {
+  ntop_genes=4000
+} else if (study=="WAT.RNA.seq") {
+  ntop_genes=2000
+}
+```
+
+```{r}
+# Visualize PCA
+if (study=="visceral.RNA.seq") {
+  ggarrange(plotlist = plotpcabulk(deseqobject = vsd,gene_cluster = gene_cluster,group_variable = group_variable,ntop_genes = ntop_genes),nrow = 3,ncol = 2)
+} else if (study=="WAT.RNA.seq") {
+  ggarrange(plotlist = plotpcabulkensg(deseqobject = vsd,gene_cluster = gene_cluster,group_variable = "Phenotype",ntop_genes = ntop_genes),nrow = 3,ncol = 2)
+}
+```
+
+```{r}
+# Identify DE genes in an obese vs lean test
+# Here, we will also read microarray dataset
+# Remove genes with padj > 0.05
+if (study=="visceral.RNA.seq" | study== "WAT.RNA.seq") {
+  de=performdebulk(dds = dds,study = study)
+} else {
+  de=performdebulk(study = study,path_to_file = "~/summary_time_series/files/GSE25401.top.table.tsv")
+}
+head(de)
+```
+
+```{r}
+# Subset DE genes to only have genes that are also temporally regulated
+de.dyna.genes=subsetdebulk(de = de,gene_cluster = gene_cluster_new,study = study)
+if (study=="visceral.RNA.seq" | study== "WAT.RNA.seq") {
+  ggplot(de.dyna.genes,aes(x=log2FoldChange,y=padj,color=cluster))+geom_point(size=3,alpha=0.5)+theme_classic(base_size = 20)+scale_color_manual(values = c("grey","grey","grey","grey","red"))+theme(legend.position = "top")+labs(x="logFC (obese vs lean)",y="FDR")
+  ggsave(filename = paste(study,"tiff",sep = "."),path = "~/summary_time_series/figures/v1/manuscript/tiffs/", width = 6, height = 5, device='tiff', dpi=600,units = "in")
+} else {
+  ggplot(de.dyna.genes,aes(x=logFC,y=adj.P.Val,color=cluster))+geom_point(size=3,alpha=0.5)+theme_classic(base_size = 20)+scale_color_manual(values = c("grey","grey","grey","grey","red"))+theme(legend.position = "top")+labs(x="logFC (obese vs lean)",y="FDR")
+  ggsave(filename = paste(study,"tiff",sep = "."),path = "~/summary_time_series/figures/v1/manuscript/tiffs/", width = 6, height = 5, device='tiff', dpi=600,units = "in")
+}
+```   
+
+```{r}
+#de.dyna.genes$bool=de.dyna.genes$log2FoldChange>0
+#de.dyna.genes$bool=de.dyna.genes$logFC>0
+#table(de.dyna.genes$cluster,de.dyna.genes$bool)
+```
+
+```{r}
+white=gene_cluster_new
+brown=gene_cluster_new
+brown_only=setdiff(names(brown),intersect(names(brown),names(white)))
+de.dyna.genes$gene=mapIds(org.Hs.eg.db, keys = rownames(de.dyna.genes), keytype = "ENSEMBL", column="SYMBOL")
+```
+
+```{r}
+x=de.dyna.genes[de.dyna.genes$cluster==4,]
+table(x$log2FoldChange>0)
+setdiff(x$gene,intersect(x$gene,names(white)))
+setdiff(rownames(x),intersect(rownames(x),names(white)))
+x[setdiff(rownames(x),intersect(rownames(x),names(white))),]
+```
+

@@ -1,0 +1,88 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(VISION)
+library(Matrix)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(gridExtra)
+
+load("~/summary_time_series/revisions/R2_C9/emont.RData")
+
+emont.pread=emont.pread[,emont.pread$technology=="Chromium-v3"]
+dim(emont.pread)
+emont.pread=emont.pread[,emont.pread$depot=="SAT"]
+emont.pread=emont.pread[,emont.pread$source=="mid-right abdomen"]
+emont.pread=emont.pread[,emont.pread$cell_type=="hASPC2"]
+
+emont.adipo=emont.adipo[,emont.adipo$technology=="Chromium-v3"]
+dim(emont.adipo)
+emont.adipo=emont.adipo[,emont.adipo$depot=="SAT"]
+emont.adipo=emont.adipo[,emont.adipo$source=="mid-right abdomen"]
+
+emont.combined <- merge(emont.pread, y = emont.adipo, add.cell.ids = c("pread", "adipo"), project = "emont.combined")
+```
+
+```{r}
+source(file = "~/time-series/RNotebook/scripts/custom_functions.R")
+
+load("~/summary_time_series/RData/white/slingshot_ugenes_de.RData")
+load("~/summary_time_series/RData/white/vision_ugenes_de.RData")
+
+# Create vision signature
+sigu=vector(mode = "double",length = length(intersect(sugenes_de,vugenes_de)))
+sigu[]=1
+names(sigu)=intersect(sugenes_de,vugenes_de)
+sig=sigu
+sig <- createGeneSignature(name = "Adipo_Ordering", sigData = sig)
+Signatures=c(sig)
+
+vis=vision(s.object = emont.combined,sig = Signatures,addUMAP = F)
+```
+
+```{r}
+emont.combined$score=vis@SigScores[,1]
+emont.combined$orig.ident=substr(emont.combined$cell_type,start = 1,stop = nchar(emont.combined$cell_type)-1)
+ggplot(emont.combined@meta.data,aes(x=range01(score),fill=orig.ident))+geom_histogram(aes(y=..density..),position = position_dodge(),color="black",alpha=1)+theme_classic(base_size = 20)+geom_density(alpha=.5)+theme(legend.position = "top")+scale_fill_manual(values = c("goldenrod","navyblue"))
+ggsave(filename = "emont_cell_score.eps",path = "~/summary_time_series/revisions/R2_C9/tiffs/", width = 7.5, height = 5.5, device='eps', dpi=300,units = "in")
+p2
+```
+
+
+```{r}
+load("~/summary_time_series/RData/white/gene_cluster_new.RData")
+sig=vector(mode = "list",length = 5)
+for (i in 0:4) {
+sigu=vector(mode = "double",length = sum(gene_cluster_new==i))
+sigu[]=1
+names(sigu)=names(gene_cluster_new)[gene_cluster_new==i]
+sig[[i+1]] <- createGeneSignature(name = as.character(i), sigData = sigu)
+}
+Signatures=unlist(sig)
+vis1=vision(s.object = emont.combined,sig = Signatures,addUMAP = F)
+```
+
+```{r}
+colnames(vis1@SigScores)=paste("gene_cluster",colnames(vis1@SigScores),sep = "_")
+emont.combined@meta.data=cbind(emont.combined@meta.data,vis1@SigScores)
+plot.df=emont.combined@meta.data[,c(grep("gene_cluster",x = colnames(emont.combined@meta.data)),1)]
+plot.df=select(plot.df,-c("gene_cluster_2"))
+plot.df=gather(plot.df,"gene_cluster","score",-orig.ident)
+ggplot(plot.df,aes(x=range01(score),fill=orig.ident))+geom_histogram(aes(y=..density..),position = position_dodge(),color="black",alpha=1)+facet_grid(.~ gene_cluster)+theme_light(base_size = 20)+geom_density(alpha=.5)+theme(legend.position = "top")+theme(legend.position = "none")+scale_fill_manual(values = c("goldenrod","navyblue"))
+ggsave(filename = "emont_module.eps",path = "~/summary_time_series/revisions/R2_C9/tiffs/", width = 8.5, height = 4, device='eps', dpi=300,units = "in")
+#p8=ggplot(plot.df,aes(x=cell_type,y=range01(score),fill=cell_type))+geom_boxplot()+facet_grid(.~ gene_cluster)+theme_classic(base_size = 10)+theme(legend.position = "top")
+p8
+```
+
+```{r}
+# Arrange all plots
+pdf(file = "~/summary_time_series/revisions/R2_C9/tiffs//emont.pdf",width = 8.5,height = 5)
+grid.arrange(p2,p8,ncol = 4, nrow = 2,layout_matrix = t(matrix(c(1,1,NA,NA,replicate(n = 4,expr = 2)),nrow = 4,ncol = 2)))
+dev.off()
+```
+

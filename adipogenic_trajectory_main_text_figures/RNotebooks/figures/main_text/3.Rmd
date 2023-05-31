@@ -1,0 +1,29 @@
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+library(viridis)
+library(circlize)
+library(ComplexHeatmap)
+size=20
+pt.size=.1
+dpi=600
+source(file = "~/summary_time_series/figures/figure_toolkit.R")
+
+load(file = "~/summary_time_series/files/white/gene_cluster_new.RData")
+load(file = "~/summary_time_series/RData/white/s.object_with_pds.RData")
+col_fun = colorRamp2(c(-2, -1, 0, 2, 3), c("#440054","#414787", "#2B7E8D", "#3BAF7C","#F6E522"))
+hm_dgenes=plot_hm_cs(s.object = s.object,ordered_gene_list = intersect(tf_humans,names(gene_cluster_new)),cell_order_variable = "pd3",gene_split = gene_cluster_new[intersect(tf_humans,names(gene_cluster_new))],show_row_names = T,col_fun=col_fun)
+
+tiff(filename = "~/summary_time_series/figures/v1/manuscript/tiffs/white.dyna.tfs.heatmap.tiff",width = 7,height = 7.5,units = "in",res = 300)
+hm_dgenes 
+dev.off()
+
+load(file = "~/summary_time_series/files/brown/gene_cluster_new.RData")
+load(file = "~/summary_time_series/RData/brown/s.object_with_pds.RData")
+col_fun = colorRamp2(c(-2, -1, 0, 2, 3), c("#440054","#414787", "#2B7E8D", "#3BAF7C","#F6E522"))
+hm_dgenes=plot_hm_cs(s.object = s.object,ordered_gene_list = intersect(tf_humans,names(gene_cluster_new)),cell_order_variable = "pd3",gene_split = gene_cluster_new[intersect(tf_humans,names(gene_cluster_new))],show_row_names = T,col_fun=col_fun)
+
+tiff(filename = "~/summary_time_series/figures/v1/manuscript/tiffs/brown.dyna.tfs.heatmap.tiff",width = 7,height = 7.5,units = "in",res = 300)
+hm_dgenes 
+dev.off()
+```

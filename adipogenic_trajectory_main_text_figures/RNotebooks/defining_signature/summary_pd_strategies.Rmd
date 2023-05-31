@@ -1,0 +1,105 @@
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(ggpubr)
+library(Matrix)
+library(matrixStats)
+library(tidyverse)
+library(VISION)
+library(org.Hs.eg.db)
+library(GO.db)
+library(limma)
+
+source(file = "~/time-series/RNotebook/scripts/custom_functions.R")
+
+# Define lineage and load file Seurat object based on that as well as variable genes
+##**** DEFINE LINEAGE HERE ****####
+lineage="brown"
+
+if (lineage=="white") {
+  print(lineage)
+  load(file = "~/summary_time_series/RData/white/s.object_with_pds.RData")
+  UMAPPlot(s.object,group.by="cluster")
+  Idents(s.object)="cluster"
+  degenes=FindMarkers(s.object,ident.1 = 0,ident.2 = 3,logfc.threshold = 1)
+}
+
+if (lineage=="brown") {
+  print(lineage)
+  load(file = "~/summary_time_series/RData/brown/s.object_with_pds.RData")
+  UMAPPlot(s.object,group.by="cluster")
+  Idents(s.object)="cluster"
+  degenes=FindMarkers(s.object,ident.1 = 0,ident.2 = 3,logfc.threshold = 1)
+}
+
+##**** DEFINE METRICS ASSOCIATED WITH CLUSTERING DYNA GENES ****####
+##*** SHOULD BE KEPT CONSISTENT ACROSS ANALYSIS ***###
+ncluster_dgenes=4
+
+##**** DEFINE PSEUDOTEMPORAL ORDERING HERE ****####
+cell_order_variable="adipo" #adipo= psedotime from vision, pd_slingshot = pseudotime fom slingshot
+
+##**** SINCE CLUSTERING MAY GENERATE DIFFERENT HEATMAPS, I HAVE SAVED MY WORKING HEATMAP****##
+if (lineage=="white") {
+  hm_dgenes=plot_hm_km(s.object = s.object,gene_list = rownames(degenes),cell_order_variable = cell_order_variable,clusters =ncluster_dgenes)
+  save(hm_dgenes,file = paste("~/summary_time_series/RData/white/hm_degenes_",cell_order_variable,".RData",sep = ""))
+ # saved clustering of genes is prvided under pseudotime -> slingshot and pseudtoime -> vision
+} else {
+  hm_dgenes=plot_hm_km(s.object = s.object,gene_list = rownames(degenes),cell_order_variable = cell_order_variable,clusters =ncluster_dgenes)
+  save(hm_dgenes,file = paste("~/summary_time_series/RData/brown/hm_degenes_",cell_order_variable,".RData",sep = ""))
+  # saved clustering of genes is prvided under pseudotime -> slingshot and pseudtoime -> vision
+}
+row_dgenes=row_order(hm_dgenes)
+ggarrange(plotlist = plot_dgenes_module(s.object = s.object,row_order_hm = row_dgenes,cell_order_variable = cell_order_variable,dyna_genes = rownames(degenes)),nrow=2,ncol=3)
+```
+
+# Write gradually up-regulated or down-regulated genes, using DE genes as the input list, in slingshot and vision 
+# Needs output from the above code chunk 
+```{r}
+if (lineage=="white" & cell_order_variable=="pd_slingshot") {
+  sugenes_de=rownames(degenes)[row_dgenes[[3]]]
+} else if (lineage=="white" & cell_order_variable=="adipo") {
+  vugenes_de=rownames(degenes)[row_dgenes[[3]]]
+} else if (lineage=="brown" & cell_order_variable=="pd_slingshot") {
+  sugenes_de=rownames(degenes)[row_dgenes[[1]]]
+} else if (lineage=="brown" & cell_order_variable=="adipo") {
+  vugenes_de=rownames(degenes)[row_dgenes[[1]]]
+} 
+```
+
+# Use custom signature to order cells in both white and brown lineage. using either only up-regulated genes, or both up- and down-regulated genes
+```{r}
+# Define lineage and load file Seurat object based on that as well as variable genes
+##**** DEFINE LINEAGE HERE ****####
+lineage="brown"
+
+source(file = "~/time-series/RNotebook/scripts/custom_functions.R")
+
+if (lineage=="white") {
+  load(file = "~/summary_time_series/RData/white/slingshot_ugenes_de.RData")
+  load(file = "~/summary_time_series/RData/white/vision_ugenes_de.RData")
+  load(file = "~/summary_time_series/RData/white/s.object_with_pds.RData")
+} else {
+  load(file = "~/summary_time_series/RData/brown/slingshot_ugenes_de.RData")
+  load(file = "~/summary_time_series/RData/brown/vision_ugenes_de.RData")
+  load(file = "~/summary_time_series/RData/brown/s.object_with_pds.RData")
+}
+# Create vision signature
+sigu=vector(mode = "double",length = length(intersect(sugenes_de,vugenes_de)))
+sigu[]=1
+names(sigu)=intersect(sugenes_de,vugenes_de)
+sig=sigu
+
+sig <- createGeneSignature(name = "Adipo_Ordering", sigData = sig)
+sig=c(sig)
+vis=vision(s.object = s.object,sig = sig)
+
+#Add adipogenic score from Vision
+s.object$pd3=vis@SigScores[,"Adipo_Ordering"]
+pseudoplot(s.object = s.object,cell_order_variable = "pd3") #pd3 is the final pseudotime used in the study. It is also provided under psuedotime ->signature
+```
+
+# Have decided on pd3 as the ordering

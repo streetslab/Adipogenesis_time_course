@@ -1,0 +1,81 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# Load libraries
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+studies=c("schwalie","merrick","schwalie")
+
+# Read schwalie dataset
+schwalie=Read10X_h5(filename = "~/summary_time_series/files/scRNAseq_public/schwalie_2018/filtered_gene_bc_matrices_h5.h5")
+schwalie.barcodes=read.delim(file = "~/summary_time_series/files/scRNAseq_public/schwalie_2018/schwalie.barcodes.txt",header = F)
+schwalie=schwalie[,schwalie.barcodes$V1]
+schwalie=CreateSeuratObject(schwalie)
+schwalie=NormalizeData(schwalie)
+schwalie=FindVariableFeatures(schwalie)
+schwalie=ScaleData(schwalie)
+schwalie=RunPCA(schwalie)
+schwalie=RunUMAP(schwalie,dims = 1:30)
+UMAPPlot(schwalie)
+```
+
+```{r}
+#G1=CREB5=P1
+FeaturePlot(schwalie,"Creb5")
+# G4=Ly6a=P1
+FeaturePlot(schwalie,"Ly6a")
+#G2=Peg3=P2
+FeaturePlot(schwalie,"Peg3")
+#G3=Meox2=P3
+FeaturePlot(schwalie,"Meox2")
+schwalie=FindNeighbors(schwalie,dims = 1:30)
+schwalie=FindClusters(schwalie,resolution = 0.2)
+UMAPPlot(schwalie,label=T,label.size=10,cols=c("red","forestgreen","lightgreen","navyblue"),pt.size=1)+theme_classic(base_size = 30)+theme_void()
+```
+
+```{r}
+# Load VISION
+library(VISION)
+library(Matrix)
+# Read in expression counts (Genes X Cells)
+counts <- schwalie@assays$RNA@counts
+# Scale counts within a sample
+n.umi <- colSums(counts)
+scaled_counts <- t(t(counts) / n.umi) * median(n.umi)
+
+# Adding UMAP
+projection <- schwalie@reductions$umap@cell.embeddings
+
+# Read in meta data (Cells x Vars)
+meta = schwalie@meta.data
+
+load("~/summary_time_series/RData/white/slingshot_ugenes_de.RData")
+load("~/summary_time_series/RData/white/vision_ugenes_de.RData")
+
+# Create vision signature
+sigu=vector(mode = "double",length = length(intersect(sugenes_de,vugenes_de)))
+sigu[]=1
+names(sigu)=intersect(sugenes_de,vugenes_de)
+sig=sigu
+sig <- createGeneSignature(name = "Adipo_Ordering", sigData = sig)
+Signatures=c(sig)
+
+#
+vis <- Vision(scaled_counts,signatures = Signatures,meta = meta)
+vis <- addProjection(vis, "UMAP", projection)
+vis <- analyze(vis)
+viewResults(vis)
+```
+
+```{r}
+schwalie$score=vis@SigScores[,1]
+ggplot(schwalie@meta.data[WhichCells(object = schwalie,idents = c(0,1,2)),],aes(x=score,fill=seurat_clusters))+geom_histogram(aes(y=..density..),position = position_dodge(),color="black",alpha=0.1)+theme_classic(base_size = 30)+geom_density(alpha=.5)+theme(legend.position = "top")+scale_fill_manual(values = c("red","forestgreen","lightgreen"))#+theme(legend.position = "none")
+```
+
+```{r}
+wilcox.test(x = schwalie$score[schwalie$seurat_clusters==1],y= schwalie$score[schwalie$seurat_clusters==2])
+```

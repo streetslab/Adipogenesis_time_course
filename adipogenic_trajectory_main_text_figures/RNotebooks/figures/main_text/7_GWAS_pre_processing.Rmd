@@ -1,0 +1,24 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# Define disease traits that I am interested in investigating
+# These traits were recorded in the following two studies:
+# 1. Genetic studies of body mass index yield new insights for obesity biology.
+# 2. New genetic loci link adipose and insulin biology to body fat distribution.
+
+# Read GWAS catalog file
+gwas=read.delim(file = "~/summary_time_series/files/gwas_catalog_v1.0-associations_e100_r2021-04-20.tsv")
+# Identify disease traits
+traits=unique(c(unique(gwas$DISEASE.TRAIT[gwas$STUDY=="Genetic studies of body mass index yield new insights for obesity biology."]),unique(gwas$DISEASE.TRAIT[gwas$STUDY=="New genetic loci link adipose and insulin biology to body fat distribution."])))
+# Subset gwas to only relevant disease traits
+gwas.subset=gwas[gwas$DISEASE.TRAIT %in% traits,]
+# gwas.subset contains MAPPED.GENE column: Gene(s) mapped to the strongest SNP. If the SNP is located within a gene, that gene is listed, with multiple overlapping genes separated by “, ”. If the SNP is intergenic, the upstream and downstream genes are listed, separated by -
+# Therefore, subset gwas.subset to only have SNPs located within a gene
+gwas.subset=gwas.subset[-grep("-",gwas.subset$MAPPED_GENE),]
+gwas.subset=gwas.subset[-grep(",",gwas.subset$MAPPED_GENE),]
+save(gwas.subset,file = "~/summary_time_series/files/gwas.subset.RData")
+```
+

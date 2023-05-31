@@ -1,0 +1,88 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+# Load libraries
+library(Seurat)
+library(ggplot2)
+library(dplyr)
+
+# Read hepler dataset
+hepler=Read10X(data.dir = "~/summary_time_series/files/scRNAseq_public/hepler_2018/")
+hepler=hepler[,hepler["tdTomato",]<=0]
+hepler=hepler[,hepler["EGFP",]>0]
+hepler=CreateSeuratObject(hepler)
+hepler[["percent.mt"]] <- PercentageFeatureSet(hepler, pattern = "^mt-")
+hepler=NormalizeData(hepler)
+hepler=FindVariableFeatures(hepler)
+hepler=ScaleData(hepler)
+hepler=RunPCA(hepler)
+hepler=RunUMAP(hepler,dims = 1:30)
+UMAPPlot(hepler)
+```
+
+```{r}
+# Cluster 1A = PPARG
+FeaturePlot(hepler,"Pparg")
+# Cluster 1B = Plin1
+FeaturePlot(hepler,"Plin1")
+# Cluster 3 = Msln
+FeaturePlot(hepler,"Msln")
+# Cluster 2 = Fn1
+FeaturePlot(hepler,"Fn1")
+FeaturePlot(hepler,"EGFP")
+```
+
+```{r}
+hepler=FindNeighbors(hepler,dims = 1:30)
+hepler=FindClusters(hepler,resolution = 0.27)
+UMAPPlot(hepler)+scale_color_manual(values = c("navyblue","salmon","red","grey","seagreen","ivory3"))+theme_void()
+```
+```{r}
+# Load VISION
+library(VISION)
+library(Matrix)
+# Read in expression counts (Genes X Cells)
+counts <- hepler@assays$RNA@counts
+# Scale counts within a sample
+n.umi <- colSums(counts)
+scaled_counts <- t(t(counts) / n.umi) * median(n.umi)
+
+# Adding UMAP
+projection <- hepler@reductions$umap@cell.embeddings
+
+# Read in meta data (Cells x Vars)
+meta = hepler@meta.data
+
+load("~/summary_time_series/RData/white/slingshot_ugenes_de.RData")
+load("~/summary_time_series/RData/white/vision_ugenes_de.RData")
+
+# Create vision signature
+sigu=vector(mode = "double",length = length(intersect(sugenes_de,vugenes_de)))
+sigu[]=1
+names(sigu)=intersect(sugenes_de,vugenes_de)
+sig=sigu
+sig <- createGeneSignature(name = "Adipo_Ordering", sigData = sig)
+Signatures=c(sig)
+
+#
+vis <- Vision(scaled_counts,signatures = Signatures,meta = meta)
+vis <- addProjection(vis, "UMAP", projection)
+vis <- analyze(vis)
+viewResults(vis)
+```
+
+```{r}
+hepler$score=vis@SigScores[,1]
+ggplot(hepler@meta.data[WhichCells(object = hepler,idents = c(0,1,2)),],aes(x=score,fill=seurat_clusters))+geom_histogram(aes(y=..density..),position = position_dodge(),color="black",alpha=0.1)+theme_classic(base_size = 30)+geom_density(alpha=.5)+theme(legend.position = "top")+scale_fill_manual(values = c("navyblue","salmon","red"))+theme(legend.position = "none")
+```
+
+```{r}
+wilcox.test(x = hepler$score[hepler$seurat_clusters==0],y= hepler$score[hepler$seurat_clusters==1])
+```

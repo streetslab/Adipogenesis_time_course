@@ -1,0 +1,101 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(gridExtra)
+library(ggplot2)
+library(RColorBrewer)
+library(viridis)
+library(circlize)
+library(ComplexHeatmap)
+library(tidyverse)
+size=20
+pt.size=.75
+dpi=600
+source(file = "~/summary_time_series/figures/figure_toolkit.R")
+
+load(file = "~/summary_time_series/RData/white/s.object_with_pds.RData")
+s.object$pd3_normalized=range01(x = s.object$pd3)
+pseudoplot(s.object = s.object,cell_order_variable = "pd3",pt.size = pt.size,text_size = size,filename = "white.umap.pseudo.tiff",dpi = dpi,type = "manuscript")
+plot_gene_list(s.object = s.object,gene_list = c("PPARG","CEBPA","CEBPB","CEBPD"),cell_order_variable = "pd3",text_size = size,type = "manuscript",filename = "white.adipo.tfs.profile.tiff")
+
+size=15
+load("~/summary_time_series/RData/white/gene_cluster.RData")
+gene_cluster_new=gene_cluster
+gene_cluster_new[gene_cluster==0]=1
+gene_cluster_new[gene_cluster==1]=4
+gene_cluster_new[gene_cluster==2]=0
+gene_cluster_new[gene_cluster==3]=2
+gene_cluster_new[gene_cluster==4]=3
+col_fun = colorRamp2(c(-2, -1, 0, 2, 3), c("#440054","#414787", "#2B7E8D", "#3BAF7C","#F6E522"))
+hm_dgenes=plot_hm_cs(s.object = s.object,ordered_gene_list = names(gene_cluster_new),cell_order_variable = "pd3",gene_split = gene_cluster_new,show_row_names = F,col_fun=col_fun)
+
+
+tiff(filename = "~/summary_time_series/figures/v1/manuscript/tiffs/white.dyna.genes.heatmap.tiff",width = 5.5,height = 4,units = "in",res = 100)
+hm_dgenes 
+dev.off()
+
+# Create data frame for faceting
+s.object=ScaleData(s.object,features = names(gene_cluster_new))
+df=data.frame(cells=colnames(s.object),pd=as.double(unlist(s.object[["pd3_normalized"]])),data=c(colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==0],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==1],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==2],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==3],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==4],]),s.object@assays$RNA@scale.data["ITGBL1",],s.object@assays$RNA@scale.data["VEGFC",],s.object@assays$RNA@scale.data["COL1A1",],s.object@assays$RNA@scale.data["ACTB",],s.object@assays$RNA@scale.data["TIMP3",],s.object@assays$RNA@scale.data["SERPINF1",],s.object@assays$RNA@scale.data["FABP4",],s.object@assays$RNA@scale.data["ZBED3",],s.object@assays$RNA@scale.data["FASN",],s.object@assays$RNA@scale.data["NR1H3",]),cluster=c(replicate(n = ncol(s.object),expr = "0"),replicate(n = ncol(s.object),expr = "1"),replicate(n = ncol(s.object),expr = "2"),replicate(n = ncol(s.object),expr = "3"),replicate(n = ncol(s.object),expr = "4"),replicate(n = ncol(s.object),expr = "0"),replicate(n = ncol(s.object),expr = "0"),replicate(n = ncol(s.object),expr = "1"),replicate(n = ncol(s.object),expr = "1"),replicate(n = ncol(s.object),expr = "2"),replicate(n = ncol(s.object),expr = "2"),replicate(n = ncol(s.object),expr = "3"),replicate(n = ncol(s.object),expr = "3"),replicate(n = ncol(s.object),expr = "4"),replicate(n = ncol(s.object),expr = "4")),type=c(replicate(n = 5*ncol(s.object),expr = "smooth"),replicate(n = ncol(s.object),expr = "ITGBL1"),replicate(n = ncol(s.object),expr = "VEGFC"),replicate(n = ncol(s.object),expr = "COL1A1"),replicate(n = ncol(s.object),expr = "ACTB"),replicate(n = ncol(s.object),expr = "TIMP3"),replicate(n = ncol(s.object),expr = "SERPINF1"),replicate(n = ncol(s.object),expr = "FABP4"),replicate(n = ncol(s.object),expr = "ZBED3"),replicate(n = ncol(s.object),expr = "FASN"),replicate(n = ncol(s.object),expr = "NR1H3")))
+mycolors=c("#1B9E77", "#A07125", "#B16548", "#8068AE", "#D03792", "#A66753", "#7FA718", "#666666", "#BF8B12", "#927132", "#D9AA04")
+
+# Plotting faceted plot  
+ggplot(df,aes(x=pd,y=data,color=type))+stat_smooth(geom='line',alpha=0.8,size=1.5)+facet_wrap(~cluster,scales = "free_x",ncol=2)+theme_classic(base_size = size)+theme(strip.background = element_blank(),strip.text.x = element_blank(),legend.position = "none")+labs(x="Pseudotime",y="Average Expression")+scale_color_manual(values = mycolors)+scale_x_discrete(limits=c(0,0.5,1),expand = c(0.1, 0))
+ggsave(filename = "white.gene.cluster.profile.tiff",path = "~/summary_time_series/figures/v2/manuscript/tiffs/", width = 4, height = 4.5, device='tiff', dpi=dpi,units = "in")
+
+cell_order=rownames(s.object@meta.data)[order(s.object$pd3,decreasing = FALSE)]
+y=as.matrix(s.object@meta.data[cell_order,"pd3"])
+rownames(y)=cell_order
+colnames(y)="pd"
+y=t(y)
+col_fun = colorRamp2(seq(0, 8, len=10),c(brewer.pal(11,'Spectral')[-6]))
+ht=Heatmap(y,show_column_names = FALSE,row_names_gp = gpar(fontsize=20),cluster_columns = FALSE,col = col_fun)
+tiff(filename = "~/summary_time_series/figures/v1/manuscript/tiffs/pd.tiff",width = 6,height = 4,units = "in",res = 100)
+ht 
+dev.off()
+```
+
+
+
+
+
+
+```{r}
+load(file = "~/summary_time_series/RData/brown/s.object_with_pds.RData")
+size=20
+pseudoplot(s.object = s.object,cell_order_variable = "pd3",pt.size = pt.size,text_size = size,filename = "brown.umap.pseudo.tiff",dpi = dpi,type = "manuscript")
+plot_gene_list(s.object = s.object,gene_list = c("PPARG","CEBPA","CEBPB","CEBPD"),cell_order_variable = "pd3",text_size = size,type = "manuscript",filename = "brown.adipo.tfs.profile.tiff")
+
+size=15
+load("~/summary_time_series/RData/brown/gene_cluster.RData")
+s.object$pd3_normalized=range01(x = s.object$pd3)
+gene_cluster_new=gene_cluster
+gene_cluster_new[gene_cluster==0]=4
+gene_cluster_new[gene_cluster==1]=0
+gene_cluster_new[gene_cluster==2]=2
+gene_cluster_new[gene_cluster==3]=1
+gene_cluster_new[gene_cluster==4]=3
+col_fun = colorRamp2(c(-2, -1, 0, 2, 3), c("#440054","#414787", "#2B7E8D", "#3BAF7C","#F6E522"))
+hm_dgenes=plot_hm_cs(s.object = s.object,ordered_gene_list = names(gene_cluster_new),cell_order_variable = "pd3",gene_split = gene_cluster_new,show_row_names = F,col_fun=col_fun)
+
+
+tiff(filename = "~/summary_time_series/figures/v1/manuscript/tiffs/brown.dyna.genes.heatmap.tiff",width = 5.4,height = 4,units = "in",res = 100)
+hm_dgenes 
+dev.off()
+
+
+# Create data frame for faceting
+s.object=ScaleData(s.object,features = names(gene_cluster_new))
+df=data.frame(cells=colnames(s.object),pd=as.double(unlist(s.object[["pd3_normalized"]])),data=c(colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==0],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==1],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==2],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==3],]),colMeans(s.object@assays$RNA@scale.data[names(gene_cluster_new)[gene_cluster_new==4],]),s.object@assays$RNA@scale.data["ITGBL1",],s.object@assays$RNA@scale.data["MKI67",],s.object@assays$RNA@scale.data["VIM",],s.object@assays$RNA@scale.data["ACTB",],s.object@assays$RNA@scale.data["COL1A2",],s.object@assays$RNA@scale.data["SERPINF1",],s.object@assays$RNA@scale.data["FABP4",],s.object@assays$RNA@scale.data["NR1H3",],s.object@assays$RNA@scale.data["PPARGC1A",],s.object@assays$RNA@scale.data["PRKAG2",]),cluster=c(replicate(n = ncol(s.object),expr = "0"),replicate(n = ncol(s.object),expr = "1"),replicate(n = ncol(s.object),expr = "2"),replicate(n = ncol(s.object),expr = "3"),replicate(n = ncol(s.object),expr = "4"),replicate(n = ncol(s.object),expr = "0"),replicate(n = ncol(s.object),expr = "0"),replicate(n = ncol(s.object),expr = "1"),replicate(n = ncol(s.object),expr = "1"),replicate(n = ncol(s.object),expr = "2"),replicate(n = ncol(s.object),expr = "2"),replicate(n = ncol(s.object),expr = "3"),replicate(n = ncol(s.object),expr = "3"),replicate(n = ncol(s.object),expr = "4"),replicate(n = ncol(s.object),expr = "4")),type=c(replicate(n = 5*ncol(s.object),expr = "smooth"),replicate(n = ncol(s.object),expr = "ITGBL1"),replicate(n = ncol(s.object),expr = "MKI67"),replicate(n = ncol(s.object),expr = "VIM"),replicate(n = ncol(s.object),expr = "ACTB"),replicate(n = ncol(s.object),expr = "COL1A2"),replicate(n = ncol(s.object),expr = "SERPINF1"),replicate(n = ncol(s.object),expr = "FABP4"),replicate(n = ncol(s.object),expr = "NR1H3"),replicate(n = ncol(s.object),expr = "PPARGC1A"),replicate(n = ncol(s.object),expr = "PRKAG2")))
+mycolors=c("#1B9E77", "#A07125", "darkblue", "#8068AE", "#D03792", "#A66753", "#7FA718", "#927132", "#BF8B12", "#666666", "#D9AA04")
+
+# Plotting faceted plot  
+ggplot(df,aes(x=pd,y=data,color=type))+stat_smooth(geom='line',alpha=0.8,size=1.5)+facet_wrap(~cluster,scales = "free_x",ncol=2)+theme_classic(base_size = size)+theme(strip.background = element_blank(),strip.text.x = element_blank(),legend.position = "none")+labs(x="Pseudotime",y="Average Expression")+scale_color_manual(values = mycolors)+scale_x_discrete(limits=c(0,0.5,1),expand = c(0.1, 0))+scale_y_discrete(limits=c(-3,0,3),expand = c(0.1, 0))
+
+ggsave(filename = "brown.gene.cluster.profile.tiff",path = "~/summary_time_series/figures/v2/manuscript/tiffs/", width = 4, height = 4.5, device='tiff', dpi=dpi,units = "in")
+```
+
+
