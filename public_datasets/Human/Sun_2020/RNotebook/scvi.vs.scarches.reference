@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+load(file = "~/time-series/Rdata/seurat_white_adipo_trajectory.RData")
+UMAPPlot(s_white_subset,group.by="cluster")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+# Cretae a new seurat object
+scarches=CreateSeuratObject(counts = s_white_subset@assays$RNA@counts)
+scarches
+
+#ls <- read.csv("latent_space/white.adipo.scarches.csv", row.names=1)
+ls <- read.csv("latent_space/ls_reference_nlayers_1.csv", row.names=1)
+ls=as.matrix(ls)
+identical(substr(colnames(scarches),start = nchar(colnames(scarches))-17,stop = nchar(colnames(scarches))),substr(rownames(ls),start = 1,stop = 18))
+
+rownames(ls)=rownames(scarches@meta.data)
+scarches[["scVI"]] <- CreateDimReducObject(embeddings =ls,key = "scVI_")
+scarches=RunUMAP(scarches,reduction="scVI",dims = 1:10)
+UMAPPlot(scarches,label=TRUE,label.size=6,pt.size=1.25)+theme_void(base_size = 20)
+```
+
+```{r}
+scarches$cluster=s_white_subset$cluster
+UMAPPlot(scarches,group.by="cluster")
+```
+```{r}
+FeaturePlot(s_white_subset,"pd_slingshot",pt.size=1.25)+scale_color_gradientn(colors = brewer.pal(11,'Spectral')[-6])+theme_void()#+geom_point(data.frame(sling_white@curves$curve1$s[sling_white@curves$curve1$ord,]),mapping=aes(x=UMAP_1,y=UMAP_2),size=0.02)
+```
+```{r}
+scarches$pd_slingshot=s_white_subset$pd_slingshot
+FeaturePlot(scarches,"pd_slingshot",pt.size=1.25)+scale_color_gradientn(colors = brewer.pal(11,'Spectral')[-6])+theme_void()
+```
+```{r}
+scarches=FindNeighbors(scarches,reduction = "scVI")
+scarches=FindClusters(scarches,resolution = 0.35)
+UMAPPlot(scarches,label=T)
+```
+
+```{r}
+rd=scarches@reductions$umap@cell.embeddings
+cl=scarches$RNA_snn_res.0.4
+dim(rd)
+length(cl)
+library(slingshot)
+sling_scarches=slingshot(data = rd,clusterLabels = cl,start.clus=1)
+```
+
+```{r}
+scarches$pd_slingshot_scarches=slingPseudotime(sling_scarches)[,1]
+FeaturePlot(scarches,"pd_slingshot_scarches",pt.size=1.25)+scale_color_gradientn(colors = brewer.pal(11,'Spectral')[-6])+theme_void()
+```
+
+```{r}
+plot(x = rescale(scarches$pd_slingshot),y = rescale(scarches$pd_slingshot_scarches))
+```
+

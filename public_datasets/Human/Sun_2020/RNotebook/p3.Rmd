@@ -1,0 +1,80 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Patient Number: sample 3
+```{r}
+library(DropletUtils)
+library(Seurat)
+p1=Read10X_h5(filename = "/home/rstudio/time-series/wolfrum/umi-counts/sample_3/output_filtered_hw3.h5")
+br.out <- barcodeRanks(p1)
+
+# Making a plot.
+plot(br.out$rank, br.out$total+1, log="xy", xlab="Rank", ylab="Total")
+o <- order(br.out$rank)
+lines(br.out$rank[o], br.out$fitted[o], col="red")
+
+abline(h=metadata(br.out)$knee, col="dodgerblue", lty=2)
+abline(h=metadata(br.out)$inflection, col="forestgreen", lty=2)
+legend("bottomleft", lty=2, col=c("dodgerblue", "forestgreen"), legend=c("knee", "inflection"))
+```
+# What if we work with top 500 barcodes?
+Median genes = 862
+```{r}
+n=500
+p1.o=p1[,rownames(br.out)[o[1:n]]]
+2^median(log(colSums(p1.o>0),base=2))
+2^median(log(colSums(p1.o),base=2))
+```
+
+Create seurat objects to remove low-quality barcodes.
+Removed high MT content cells.
+Assuming no empty droplets. 
+
+```{r}
+s.object=CreateSeuratObject(p1.o)
+s.object[["percent.mt"]] <- PercentageFeatureSet(s.object, pattern = "^MT-")
+VlnPlot(s.object,"percent.mt")
+s.object <- subset(s.object, subset = percent.mt < 10)
+
+s.object=NormalizeData(s.object)
+s.object=FindVariableFeatures(s.object)
+s.object=ScaleData(s.object)
+s.object=RunPCA(s.object)
+s.object=RunUMAP(s.object,dims = 1:30)
+UMAPPlot(s.object)
+```
+```{r}
+#Use marker genes from studies to assign clusters
+fibroblasts=c("COL19A1","CNTNAP2")
+adipocytes="ADIPOQ"
+preadipocytes="DCLK1"
+endothelial="PECAM1"
+cd4tcells=c("PTPRC","IL7R")
+FeaturePlot(s.object,features = fibroblasts)
+FeaturePlot(s.object,features = adipocytes)
+FeaturePlot(s.object,features = preadipocytes)
+FeaturePlot(s.object,features = endothelial)
+FeaturePlot(s.object,features = cd4tcells)
+```
+```{r}
+s.object=FindNeighbors(s.object)
+s.object=FindClusters(s.object,resolution = 0.6)
+UMAPPlot(s.object,label=T)
+```
+```{r}
+sce.object=as.SingleCellExperiment(s.object)
+library(scran)
+dbl.dens=doubletCells(x = sce.object)
+s.object$DoubletScore <- dbl.dens
+FeaturePlot(s.object,"DoubletScore")
+```
+```{r}
+s.object <- subset(s.object, subset = DoubletScore < 100)
+UMAPPlot(s.object)
+```
+
+```{r}
+write.table(x = colnames(s.object),file = "/home/rstudio/time-series/wolfrum/barcodes/sample.3.txt",sep = "\n",row.names = FALSE,col.names = FALSE,quote = FALSE,eol = "\n")
+```

@@ -1,0 +1,150 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(Seurat)
+library(Matrix)
+library(VISION)
+```
+
+```{r setup}
+knitr::opts_knit$set(root.dir = "/home/rstudio/time-series/wolfrum/")
+```
+
+```{r}
+# Read original h5s from the 3 samples and subset them to have the high-quality, no doublet barcodes
+n=length(list.files(path = "barcodes/original_sample/"))
+
+s.object=vector(mode = "list",length = n)
+j=1
+for (i in list.files(path = "umi-counts/",recursive = T,full.names = T)) {
+  s.object[[j]]=Read10X_h5(filename = i)
+  j=j+1
+}
+
+barcodes=vector(mode = "list",length = n)
+j=1
+for (i in list.files(path = "barcodes/original_sample/",full.names = T)) {
+  barcodes[[j]]=read.table(file = i,header = F,sep = "\n")
+  j=j+1
+}
+
+for (i in 1:n) {
+  s.object[[i]]=s.object[[i]][,unlist(barcodes[[i]])]
+}
+```
+
+```{r}
+# Create 3 seurat objects and merge them together
+for (i in 1:n) {
+  s.object[[i]]=CreateSeuratObject(s.object[[i]],project = paste("sample",i,sep = ""))
+}
+s.object=merge(s.object[[1]], y = c(s.object[[2]],s.object[[3]]), add.cell.ids = c("01","02","03"))
+```
+
+```{r}
+#Read latent space
+ls <- read.csv("latent_space/latent_space.csv", row.names=1)
+ls=as.matrix(ls)
+rownames(ls)=rownames(s.object@meta.data)
+s.object[["scVI"]] <- CreateDimReducObject(embeddings =ls,key = "scVI_")
+
+# Generate UMAP
+s.object=RunUMAP(s.object,reduction="scVI",dims = 1:10)
+library(RColorBrewer)
+library(ggplot2)
+UMAPPlot(s.object,label=TRUE,label.size=6,pt.size=1.25)+theme_void(base_size = 20)
+
+# Normalize data for visualization
+s.object=NormalizeData(s.object)
+```
+```{r}
+#Annotate clusters based on markers identified in the original study
+fibroblasts=c("COL19A1","CNTNAP2")
+adipocytes="ADIPOQ"
+preadipocytes="DCLK1"
+endothelial="PECAM1"
+cd4tcells=c("PTPRC","IL7R")
+FeaturePlot(s.object,features = fibroblasts)
+FeaturePlot(s.object,features = adipocytes)
+FeaturePlot(s.object,features = preadipocytes)
+FeaturePlot(s.object,features = endothelial)
+FeaturePlot(s.object,features = cd4tcells)
+```
+
+```{r}
+# Find clusters and annotate them with clusters in sun et al.
+s.object=FindNeighbors(s.object,reduction = "scVI")
+s.object=FindClusters(s.object,resolution = 0.3)
+UMAPPlot(s.object,label=T)
+```
+
+```{r}
+s.object$annotation=factor(x = "preadipocytes",levels = c("preadipocytes","endothelial","adipocytes","fibroblasts","cd4tcells"))
+j=1
+for (i in levels(s.object$RNA_snn_res.0.3)) {
+  s.object@meta.data[WhichCells(s.object,idents = i),"annotation"]=levels(s.object$annotation)[j]
+  j=j+1
+}
+Idents(s.object)="annotation"
+UMAPPlot(s.object,label=F,cols=brewer.pal(n = 5,name = "Dark2"))+theme_void(base_size = 20)
+```
+```{r}
+# Write query barcodes
+query.barcodes=c(WhichCells(s.object,idents = "preadipocytes"),WhichCells(s.object,idents = "adipocytes"))
+j=1
+for (i in query.barcodes) {
+  query.barcodes[j]=paste(i,as.double(unlist(strsplit(i,split = "_"))[1])+4,sep = "-")
+  query.barcodes[j]=substr(query.barcodes[j],start = 4,stop = 23)
+  j=j+1
+}
+write.table(x = query.barcodes,file = "barcodes/query.barcodes.txt",sep = "\n",row.names = FALSE,col.names = FALSE,quote = FALSE,eol = "\n")
+```
+
+```{r}
+source(file = "~/time-series/RNotebook/scripts/custom_functions.R")
+load("~/summary_time_series/RData/white/slingshot_ugenes_de.RData")
+load("~/summary_time_series/RData/white/vision_ugenes_de.RData")
+
+# Create vision signature
+sigu=vector(mode = "double",length = length(intersect(sugenes_de,vugenes_de)))
+sigu[]=1
+names(sigu)=intersect(sugenes_de,vugenes_de)
+sigu <- createGeneSignature(name = "Adipo_Ordering", sigData = sigu)
+Signatures=c(sigu)
+
+vis=vision(s.object = s.object,sig = Signatures)
+```
+
+```{r}
+s.object$score=vis@SigScores[,1]
+ggplot(s.object@meta.data[c(WhichCells(s.object,idents = "preadipocytes"),WhichCells(s.object,idents = "adipocytes")),],aes(x=score,fill=annotation))+geom_histogram(aes(y=..density..),position = position_dodge(),color="black",alpha=0.1)+theme_classic(base_size = 20)+geom_density(alpha=.5)+theme(legend.position = "top")+theme(legend.position = "none")+scale_fill_manual(values = c("#1B9E77","#7570B3"))
+```
+
+```{r}
+library(dplyr)
+s.object@meta.data[c(WhichCells(s.object,idents = "preadipocytes"),WhichCells(s.object,idents = "adipocytes")),] %>% group_by(annotation) %>% summarise(mean(score))
+```
+
+```{r}
+load("~/time-series/wolfrum/brown.RData")
+source(file = "~/time-series/RNotebook/scripts/custom_functions.R")
+load("~/summary_time_series/RData/brown/slingshot_ugenes_de.RData")
+load("~/summary_time_series/RData/brown/vision_ugenes_de.RData")
+
+# Create vision signature
+sigu=vector(mode = "double",length = length(intersect(sugenes_de,vugenes_de)))
+sigu[]=1
+names(sigu)=intersect(sugenes_de,vugenes_de)
+sigu <- createGeneSignature(name = "Adipo_Ordering", sigData = sigu)
+Signatures=c(sigu)
+
+vis=vision(s.object = integrated,sig = Signatures)
+```
+
+```{r}
+integrated$score=vis@SigScores[,1]
+ggplot(integrated@meta.data[c(WhichCells(integrated,idents = 2),WhichCells(integrated,idents = 3)),],aes(x=score,fill=seurat_clusters))+geom_histogram(aes(y=..density..),position = position_dodge(),color="black",alpha=0.1)+theme_classic(base_size = 20)+geom_density(alpha=.5)+theme(legend.position = "top")+theme(legend.position = "none")+scale_fill_manual(values = c("#BF9D08","#8CAC00"))
+```
